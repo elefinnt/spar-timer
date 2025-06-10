@@ -6,10 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Play, Pause, RotateCcw, Settings } from "lucide-react";
-import {
-  AudioSettings,
-  type AudioSettings as AudioSettingsType,
-} from "./audio-settings";
 
 export default function Timer() {
   const [roundTime, setRoundTime] = useState(180); // 3 minutes in seconds
@@ -26,28 +22,11 @@ export default function Timer() {
   const [roundMinutes, setRoundMinutes] = useState(3);
   const [roundSeconds, setRoundSeconds] = useState(0);
   const [audioEnabled, setAudioEnabled] = useState(true);
-  const [useCustomAudio, setUseCustomAudio] = useState(false);
-  const [audioSettings, setAudioSettings] = useState<AudioSettingsType>({
-    roundStart: "",
-    roundEnd: "",
-    restStart: "",
-    restEnd: "",
-    sessionComplete: "",
-  });
 
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  const playCustomAudio = (type: keyof AudioSettingsType) => {
-    if (!audioEnabled || !useCustomAudio || !audioSettings[type]) return;
-    const audio = new Audio(audioSettings[type]);
-    void audio.play().catch((error) => {
-      console.error("Error playing audio:", error);
-    });
-  };
-
   const playBeep = (frequency: number, duration: number) => {
     if (!audioEnabled) return;
-    if (useCustomAudio) return; // Skip beep if using custom audio
 
     try {
       audioContextRef.current ??= new (window.AudioContext ??
@@ -60,7 +39,7 @@ export default function Timer() {
       gainNode.connect(audioContextRef.current.destination);
 
       oscillator.frequency.value = frequency;
-      oscillator.type = "custom";
+      oscillator.type = "square";
 
       gainNode.gain.setValueAtTime(0.3, audioContextRef.current.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(
@@ -85,31 +64,32 @@ export default function Timer() {
       intervalRef.current = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
+            // Time's up for current period - play alert
             if (isResting) {
-              playCustomAudio("restEnd");
+              // Rest period ended, start next round
+              playBeep(800, 0.5); // Higher pitch for round start
               if (currentRound < totalRounds) {
                 setCurrentRound((prev) => prev + 1);
                 setIsResting(false);
-                playCustomAudio("roundStart");
                 return roundTime;
               } else {
-                playCustomAudio("sessionComplete");
+                // All rounds completed
+                playBeep(1000, 1); // Long beep for completion
                 setIsFinished(true);
                 setIsRunning(false);
                 return 0;
               }
             } else {
-              playCustomAudio("roundEnd");
+              // Round ended, start rest period
+              playBeep(400, 0.5); // Lower pitch for rest start
               setIsResting(true);
-              playCustomAudio("restStart");
               return restTime;
             }
           }
 
+          // Warning beeps for last 3 seconds
           if (prev <= 3 && prev > 0) {
-            if (!useCustomAudio) {
-              playBeep(600, 0.1);
-            }
+            playBeep(600, 0.1);
           }
 
           return prev - 1;
@@ -135,8 +115,6 @@ export default function Timer() {
     restTime,
     isFinished,
     audioEnabled,
-    useCustomAudio,
-    audioSettings,
   ]);
 
   const formatTime = (seconds: number) => {
@@ -184,7 +162,7 @@ export default function Timer() {
 
   if (showSettings) {
     return (
-      <div className="mx-auto w-full max-w-md space-y-4 p-4">
+      <div className="mx-auto w-full max-w-md p-4">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -283,26 +261,6 @@ export default function Timer() {
                 Enable audio alerts
               </Label>
             </div>
-
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="use-custom-audio"
-                checked={useCustomAudio}
-                onChange={(e) => setUseCustomAudio(e.target.checked)}
-                className="rounded"
-              />
-              <Label htmlFor="use-custom-audio" className="text-sm">
-                Use custom audio
-              </Label>
-            </div>
-
-            {useCustomAudio && (
-              <AudioSettings
-                settings={audioSettings}
-                onSettingsChange={setAudioSettings}
-              />
-            )}
 
             <Button
               onClick={handleStart}
