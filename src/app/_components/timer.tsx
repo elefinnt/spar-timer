@@ -7,7 +7,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Play, Pause, RotateCcw, Settings } from "lucide-react";
 
-export default function Timer() {
+export default function Component() {
   const [roundTime, setRoundTime] = useState(180); // 3 minutes in seconds
   const [restTime, setRestTime] = useState(60); // 1 minute in seconds
   const [totalRounds, setTotalRounds] = useState(5);
@@ -18,6 +18,7 @@ export default function Timer() {
   const [isFinished, setIsFinished] = useState(false);
   const [showSettings, setShowSettings] = useState(true);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
   const [roundMinutes, setRoundMinutes] = useState(3);
   const [roundSeconds, setRoundSeconds] = useState(0);
@@ -54,6 +55,23 @@ export default function Timer() {
     }
   };
 
+  const requestWakeLock = async () => {
+    try {
+      if ("wakeLock" in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request("screen");
+      }
+    } catch (error) {
+      console.log("Wake lock not supported or failed:", error);
+    }
+  };
+
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) {
+      void wakeLockRef.current.release();
+      wakeLockRef.current = null;
+    }
+  };
+
   useEffect(() => {
     // Update roundTime when minutes or seconds change
     setRoundTime(roundMinutes * 60 + roundSeconds);
@@ -75,6 +93,7 @@ export default function Timer() {
               } else {
                 // All rounds completed
                 playBeep(1000, 1); // Long beep for completion
+                releaseWakeLock();
                 setIsFinished(true);
                 setIsRunning(false);
                 return 0;
@@ -131,14 +150,17 @@ export default function Timer() {
       setTimeLeft(totalRoundTime);
     }
     setIsRunning(true);
+    void requestWakeLock();
   };
 
   const handlePause = () => {
     setIsRunning(false);
+    releaseWakeLock();
   };
 
   const handleReset = () => {
     setIsRunning(false);
+    releaseWakeLock();
     setCurrentRound(1);
     const totalRoundTime = roundMinutes * 60 + roundSeconds;
     setRoundTime(totalRoundTime);
@@ -159,6 +181,12 @@ export default function Timer() {
     if (isResting) return `Rest - Round ${currentRound} of ${totalRounds}`;
     return `Round ${currentRound} of ${totalRounds}`;
   };
+
+  useEffect(() => {
+    return () => {
+      releaseWakeLock();
+    };
+  }, []);
 
   if (showSettings) {
     return (
@@ -260,6 +288,10 @@ export default function Timer() {
               <Label htmlFor="audio-enabled" className="text-sm">
                 Enable audio alerts
               </Label>
+            </div>
+
+            <div className="text-muted-foreground mt-2 text-xs">
+              📱 Screen will stay awake during training sessions
             </div>
 
             <Button
